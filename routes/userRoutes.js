@@ -6,6 +6,7 @@ const { authMiddleware, signToken }  = require('../service/authMiddleware');
 
 const router = express.Router();
 
+
 // Login API
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
