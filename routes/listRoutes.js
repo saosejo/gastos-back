@@ -35,6 +35,7 @@ router.post('/lists/:listId/share', authMiddleware, async (req, res) => {
     res.send(list);
 });
 
+
 router.post('/expenses', authMiddleware, async (req, res) => {
     const { list, name, amount, categories, date, createdBy } = req.body;
     const userId = req.user;

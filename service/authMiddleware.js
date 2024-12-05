@@ -2,6 +2,7 @@
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
 
+
 // Middleware to verify token
 const authMiddleware = (req, res, next) => {
   console.log(req.headers);
