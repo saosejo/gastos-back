@@ -51,4 +51,21 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// Check Auth APIrouter.get('/auth/me', authMiddleware, async (req, res) => {
+router.get('/auth/me', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user; // Extracted from authMiddleware
+    const user = await User.findById(userId).select('-password'); // Exclude password from response
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json(user);
+  } catch (error) {
+    console.error('Auth check error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;
