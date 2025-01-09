@@ -1,5 +1,6 @@
 // models/User.js
 const mongoose = require('mongoose');
+const Category = require('./category');
 
 
 const listSchema = new mongoose.Schema({
