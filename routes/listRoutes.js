@@ -35,7 +35,7 @@ router.post('/createList', authMiddleware, async (req, res) => {
     // Create the new List document
     const list = new List({
       name: listReq.name,
-      budget: listReq.budgetLimit,
+      budget: listReq.budget,
       categories: listReq.categories,
       recurrence: recurrenceId, // Use the recurrence ID, whether new or existing
       createdBy: userId,
@@ -73,14 +73,11 @@ router.post('/lists/:listId/share', authMiddleware, async (req, res) => {
 
 
 router.post('/expenses', authMiddleware, async (req, res) => {
-    const { list, name, amount, categories, date, createdBy } = req.body;
+    const expenseReq = req.body;
     const userId = req.user;
-    const listId = list._id; // Extract listId from the list object
-    const listSearch = await List.findById(listId);
-    if (!listSearch.categories.includes(categories)) {
-        return res.status(400).send({ message: 'Invalid category' });
-    }
-    const expense = new Expense({ listId, name, amount, category: categories, date, createdBy: userId });
+    const listSearch = await List.findById(expenseReq.listId);
+  
+    const expense = new Expense({ ...expenseReq, createdBy: userId });
     await expense.save();
     listSearch.expenses.push(expense._id);
     await listSearch.save();
