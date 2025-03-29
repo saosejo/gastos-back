@@ -2,7 +2,7 @@
 const mongoose = require('mongoose');
 
 
-const listSchema = new mongoose.Schema({
+const recurrenceSchema = new mongoose.Schema({
   type: String,
   period: String,
   interval: Number,
@@ -10,5 +10,5 @@ const listSchema = new mongoose.Schema({
   endDate: Date,
 });
 
-const Recurrence = mongoose.model('Recurrence', listSchema);
+const Recurrence = mongoose.model('Recurrence', recurrenceSchema);
 module.exports = Recurrence;

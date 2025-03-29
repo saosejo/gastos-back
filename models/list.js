@@ -8,7 +8,7 @@ const listSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   sharedWith: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   budget: Number,
-  categories: [String],
+  categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
   expenses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Expense' }],
   recurrence: { type: mongoose.Schema.Types.ObjectId, ref: 'Recurrence' },
 });
