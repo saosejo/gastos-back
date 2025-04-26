@@ -1,6 +1,6 @@
 // routes/userRoutes.js
 const express = require('express');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const List = require('../models/list'); // Import the User model
 const Expense = require('../models/expense'); // Import the User model
 const User = require('../models/user');
