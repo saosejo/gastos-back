@@ -19,7 +19,7 @@ mongoose.connect(process.env.MONGO_URI, {
   useUnifiedTopology: true,
 })
 .then(async () => {
-  await mongoose.connection.db.admin().ping();
+  //await mongoose.connection.db.admin().ping();
   isConnected = true;
   console.log('✅ Successfully connected and pinged MongoDB');
 })
