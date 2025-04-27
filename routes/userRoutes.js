@@ -28,6 +28,7 @@ router.post('/login', async (req, res) => {
 
 router.post('/register', async (req, res) => {
   try {
+    console.log('Incoming register request body:', req.body);
     const { email, password } = req.body;
 
     // Check if the user already exists
