@@ -41,11 +41,11 @@ router.post('/register', async (req, res) => {
       
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-
+    console.log('Hashed password:', hashedPassword);
     const newUser = new User({ email, password: hashedPassword });
     // Create new user
     await newUser.save();
-
+    console.error('Success creating user:', newUser);
     res.status(201).json({ message: 'User created successfully', user: newUser });
   } catch (error) {
     console.error('Error creating user:', error);
