@@ -6,8 +6,10 @@ const Expense = require('../models/expense'); // Import the User model
 const User = require('../models/user');
 const Recurrence = require('../models/recurrence');
 const Category = require('../models/category');
-const { authMiddleware }  = require('../service/authMiddleware');
+const { authMiddleware, signToken }  = require('../service/authMiddleware');
 const moment = require('moment');
+const fetch = require('node-fetch');
+const jwt = require('jsonwebtoken');
 
 const router = express.Router();
 
@@ -264,6 +266,147 @@ router.put('/lists/:listId/categories', authMiddleware, async (req, res) => {
       { new: true }
     );
     res.send(list);
+});
+
+// Add a new category to a specific list
+router.post('/lists/:listId/categories', authMiddleware, async (req, res) => {
+  try {
+    const { listId } = req.params;
+    const category = req.body.category;
+    const userId = req.user;
+
+    // Validate input
+    if (!category.name) {
+      return res.status(400).send({ message: 'Category name and budget are required' });
+    }
+
+    // Verify the list exists and belongs to the user
+    const list = await List.findOne({
+      _id: listId,
+      $or: [{ createdBy: userId }, { sharedWith: userId }]
+    }).populate('categories');
+
+    if (!list) {
+      return res.status(404).send({ message: 'List not found or access denied' });
+    }
+
+    // Check if category with same name already exists in this list
+    const existingCategory = list.categories.find(cat => cat.name === category.name);
+    if (existingCategory) {
+      return res.status(400).send({ message: 'Category with this name already exists in the list' });
+    }
+
+    // Create new category
+    const newCategory = new Category(category);
+
+    const savedCategory = await newCategory.save();
+
+    // Add category to list
+    list.categories.push(savedCategory._id);
+    await list.save();
+
+    // Return the created category
+    res.status(201).send(savedCategory);
+  } catch (error) {
+    console.error('Error adding category:', error);
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+// Delete a category from a list
+router.delete('/lists/:listId/categories/:categoryId', authMiddleware, async (req, res) => {
+  try {
+    const { listId, categoryId } = req.params;
+    const userId = req.user;
+
+    // Verify the list exists and belongs to the user
+    const list = await List.findOne({
+      _id: listId,
+      $or: [{ createdBy: userId }, { sharedWith: userId }]
+    });
+
+    if (!list) {
+      return res.status(404).send({ message: 'List not found or access denied' });
+    }
+
+    // Check if category exists in MongoDB (not just in the list)
+    const category = await Category.findById(categoryId);
+    if (!category) {
+      return res.status(404).send({ message: 'Category not found' });
+    }
+
+    // Check if category exists in the list's categories array
+    if (!list.categories.includes(categoryId)) {
+      return res.status(400).send({ message: 'Category not associated with this list' });
+    }
+
+    // Remove category from list
+    list.categories.pull(categoryId);
+    await list.save();
+
+    // Delete all expenses associated with this category in this list
+    await Expense.deleteMany({ 
+      listId: list._id,
+      category: categoryId 
+    });
+
+    // Delete the category itself (only if not used in other lists)
+    const isUsedInOtherLists = await List.exists({ 
+      _id: { $ne: listId }, 
+      categories: categoryId 
+    });
+
+    if (!isUsedInOtherLists) {
+      await Category.findByIdAndDelete(categoryId);
+    }
+
+    res.status(200).send({ 
+      message: 'Category removed from list successfully',
+      categoryDeleted: !isUsedInOtherLists
+    });
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+router.post('/auth/google/callback', async (req, res) => {
+  const { code, redirect_uri } = req.body;
+
+  // Exchange code for tokens
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      redirect_uri,
+      grant_type: 'authorization_code'
+    })
+  });
+
+  const tokenData = await tokenRes.json();
+  if (!tokenData.access_token) {
+    return res.status(400).json({ message: 'Failed to get access token from Google' });
+  }
+
+  // Get user info
+  const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+    headers: { Authorization: `Bearer ${tokenData.access_token}` }
+  });
+  const profile = await userRes.json();
+
+  // Find or create user in your DB
+  let user = await User.findOne({ email: profile.email });
+  if (!user) {
+    const newUser = new User({ email: profile.email});
+    await newUser.save();
+  }
+  // Create JWT Token
+  const token = signToken(user); 
+
+  res.json({ user, token });
 });
 
 module.exports = router;
