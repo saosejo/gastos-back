@@ -222,7 +222,7 @@ router.post('/expenses', authMiddleware, async (req, res) => {
 
     // Create the expense with the category ID
     const expense = new Expense({
-        name: expenseReq.name,
+        description: expenseReq.description,
         amount: parseFloat(expenseReq.amount),
         date: expenseReq.date ? new Date(expenseReq.date) : new Date(),
         listId: listSearch._id,
