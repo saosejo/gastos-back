@@ -256,6 +256,43 @@ router.get('/expenses/:listId', authMiddleware, async (req, res) => {
     const expenses = await Expense.find({ listId });
     res.send(expenses);
 });
+
+// Delete an expense from a list
+router.delete('/expenses/:expenseId', authMiddleware, async (req, res) => {
+  try {
+    const { expenseId } = req.params;
+    const userId = req.user;
+
+    // Find the expense and populate the list to check ownership
+    const expense = await Expense.findById(expenseId).populate('listId');
+    
+    if (!expense) {
+      return res.status(404).send({ message: 'Expense not found' });
+    }
+
+    // Check if the user has permission to delete this expense
+    // User can delete if they created the expense or if they own the list
+    if (expense.createdBy.toString() !== userId && 
+        expense.listId.createdBy.toString() !== userId &&
+        !expense.listId.sharedWith.includes(userId)) {
+      return res.status(403).send({ message: 'Access denied' });
+    }
+
+    // Remove the expense ID from the list's expenses array
+    await List.findByIdAndUpdate(
+      expense.listId._id,
+      { $pull: { expenses: expenseId } }
+    );
+
+    // Delete the expense
+    await Expense.findByIdAndDelete(expenseId);
+
+    res.status(200).send({ message: 'Expense deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting expense:', error);
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
  
 router.put('/lists/:listId/categories', authMiddleware, async (req, res) => {
     const { listId } = req.params;
