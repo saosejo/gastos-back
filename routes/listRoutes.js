@@ -74,6 +74,7 @@ router.post("/createList", authMiddleware, async (req, res) => {
 
 router.get('/getlists/:userId', authMiddleware, async (req, res) => {
   const userId = req.user;
+  const { date } = req.query; // Get the date parameter from query string
 
   try {
     // Fetch lists along with recurrence and expenses
@@ -102,37 +103,37 @@ router.get('/getlists/:userId', authMiddleware, async (req, res) => {
       }
 
       const { period, interval } = list.recurrence;
-      const now = moment(); // Current date for comparison
+      const referenceDate = date ? moment(date) : moment(); // Use provided date or current date
       var startRange; var endRange;
 
       // Define the date range based on the recurrence period and startDate
       switch (period) {
         case 'daily':     
-          // Default to the current day
-          startRange = now.clone().startOf('day');
-          endRange = now.clone().endOf('day');
+          // Use the specified date or current day
+          startRange = referenceDate.clone().startOf('day');
+          endRange = referenceDate.clone().endOf('day');
           break;
 
         case 'weekly':  
-            // Default to the current week
-            startRange = now.clone().startOf('week');
-            endRange = now.clone().endOf('week');
+            // Use the specified date's week or current week
+            startRange = referenceDate.clone().startOf('week');
+            endRange = referenceDate.clone().endOf('week');
           break;
 
         case 'monthly':
-            // Default to the current month
-            startRange = now.clone().startOf('month');
-            endRange = now.clone().endOf('month');
+            // Use the specified date's month or current month
+            startRange = referenceDate.clone().startOf('month');
+            endRange = referenceDate.clone().endOf('month');
           break;
         case 'yearly':
-            // Default to the current year
-            startRange = now.clone().startOf('year');
-            endRange = now.clone().endOf('year');
+            // Use the specified date's year or current year
+            startRange = referenceDate.clone().startOf('year');
+            endRange = referenceDate.clone().endOf('year');
           break;
 
         case 'custom':
           if (interval) {
-            startRange = now.clone().startOf('day');
+            startRange = referenceDate.clone().startOf('day');
             endRange = startRange.clone().add(6, 'days').endOf('day'); // A week spans 7 days
           } else {
             // If no custom range is provided, skip filtering
@@ -155,7 +156,12 @@ router.get('/getlists/:userId', authMiddleware, async (req, res) => {
       // Replace expenses with the filtered ones
       return {
         ...list._doc,
-        expenses: filteredExpenses
+        expenses: filteredExpenses,
+        currentPeriod: {
+          start: startRange.toISOString(),
+          end: endRange.toISOString(),
+          period: period
+        }
       };
     });
 
@@ -224,7 +230,7 @@ router.post('/expenses', authMiddleware, async (req, res) => {
     const expense = new Expense({
         description: expenseReq.description,
         amount: parseFloat(expenseReq.amount),
-        date: expenseReq.date ? new Date(expenseReq.date) : new Date(),
+        date: expenseReq.date ? new Date(expenseReq.date + 'T12:00:00.000Z') : new Date(),
         listId: listSearch._id,
         createdBy: userId,
         category: category._id, // Use the found category ID
@@ -403,6 +409,61 @@ router.delete('/lists/:listId/categories/:categoryId', authMiddleware, async (re
     });
   } catch (error) {
     console.error('Error deleting category:', error);
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+// Update a category in a list
+router.put('/lists/:listId/categories/:categoryId', authMiddleware, async (req, res) => {
+  try {
+    const { listId, categoryId } = req.params;
+    const { name, budget } = req.body;
+    const userId = req.user;
+
+    // Validate input
+    if (!name || budget === undefined) {
+      return res.status(400).send({ message: 'Category name and budget are required' });
+    }
+
+    // Verify the list exists and belongs to the user
+    const list = await List.findOne({
+      _id: listId,
+      $or: [{ createdBy: userId }, { sharedWith: userId }]
+    });
+
+    if (!list) {
+      return res.status(404).send({ message: 'List not found or access denied' });
+    }
+
+    // Check if category exists in MongoDB
+    const category = await Category.findById(categoryId);
+    if (!category) {
+      return res.status(404).send({ message: 'Category not found' });
+    }
+
+    // Check if category exists in the list's categories array
+    if (!list.categories.includes(categoryId)) {
+      return res.status(400).send({ message: 'Category not associated with this list' });
+    }
+
+    // Check if new name conflicts with existing categories in this list
+    const existingCategory = list.categories.find(cat => 
+      cat.toString() !== categoryId && cat.name === name
+    );
+    if (existingCategory) {
+      return res.status(400).send({ message: 'Category with this name already exists in the list' });
+    }
+
+    // Update the category
+    const updatedCategory = await Category.findByIdAndUpdate(
+      categoryId,
+      { name, budget },
+      { new: true }
+    );
+
+    res.status(200).send(updatedCategory);
+  } catch (error) {
+    console.error('Error updating category:', error);
     res.status(500).send({ message: 'Internal server error' });
   }
 });
