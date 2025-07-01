@@ -95,77 +95,10 @@ router.get('/getlists/:userId', authMiddleware, async (req, res) => {
       })
       .populate('categories');
 
-    // Filter expenses based on recurrence
-    const filteredLists = lists.map((list) => {
-      if ( list.recurrence.type === 'One-time') {
-        // For One-time recurrence, include all expenses
-        return list;
-      }
-
-      const { period, interval } = list.recurrence;
-      const referenceDate = date ? moment(date) : moment(); // Use provided date or current date
-      var startRange; var endRange;
-
-      // Define the date range based on the recurrence period and startDate
-      switch (period) {
-        case 'daily':     
-          // Use the specified date or current day
-          startRange = referenceDate.clone().startOf('day');
-          endRange = referenceDate.clone().endOf('day');
-          break;
-
-        case 'weekly':  
-            // Use the specified date's week or current week
-            startRange = referenceDate.clone().startOf('week');
-            endRange = referenceDate.clone().endOf('week');
-          break;
-
-        case 'monthly':
-            // Use the specified date's month or current month
-            startRange = referenceDate.clone().startOf('month');
-            endRange = referenceDate.clone().endOf('month');
-          break;
-        case 'yearly':
-            // Use the specified date's year or current year
-            startRange = referenceDate.clone().startOf('year');
-            endRange = referenceDate.clone().endOf('year');
-          break;
-
-        case 'custom':
-          if (interval) {
-            startRange = referenceDate.clone().startOf('day');
-            endRange = startRange.clone().add(6, 'days').endOf('day'); // A week spans 7 days
-          } else {
-            // If no custom range is provided, skip filtering
-            startRange = moment().startOf('day');
-            endRange = moment().endOf('day');
-          }
-          break;
-
-        default:
-          // If no valid period, return the list as is
-          return list;
-      }
-
-      // Filter expenses based on the defined range
-      const filteredExpenses = list.expenses.filter((expense) => {
-        const expenseDate = moment(expense.date);
-        return expenseDate.isBetween(startRange, endRange, 'day', '[]'); // Inclusive range
-      });
-
-      // Replace expenses with the filtered ones
-      return {
-        ...list._doc,
-        expenses: filteredExpenses,
-        currentPeriod: {
-          start: startRange.toISOString(),
-          end: endRange.toISOString(),
-          period: period
-        }
-      };
-    });
-
-    res.send(filteredLists);
+    // Remove backend filtering by period/concurrency
+    // Always return all expenses for each list
+    // The frontend will handle filtering by period if needed
+    res.send(lists);
   } catch (error) {
     console.error('Error fetching lists:', error);
     res.status(500).send({ message: 'Error fetching lists', error });
@@ -296,6 +229,59 @@ router.delete('/expenses/:expenseId', authMiddleware, async (req, res) => {
     res.status(200).send({ message: 'Expense deleted successfully' });
   } catch (error) {
     console.error('Error deleting expense:', error);
+    res.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+// Update an expense
+router.put('/expenses/:expenseId', authMiddleware, async (req, res) => {
+  try {
+    const { expenseId } = req.params;
+    const { description, amount, category, date } = req.body;
+    const userId = req.user;
+
+    // Validate input
+    if (!description || !amount || !category || !date) {
+      return res.status(400).send({ message: 'All fields are required' });
+    }
+
+    // Find the expense and populate the list to check ownership
+    const expense = await Expense.findById(expenseId).populate('listId');
+    
+    if (!expense) {
+      return res.status(404).send({ message: 'Expense not found' });
+    }
+
+    // Check if the user has permission to update this expense
+    // User can update if they created the expense or if they own the list
+    if (expense.createdBy.toString() !== userId && 
+        expense.listId.createdBy.toString() !== userId &&
+        !expense.listId.sharedWith.includes(userId)) {
+      return res.status(403).send({ message: 'Access denied' });
+    }
+
+    // Find the category ID by matching the category name in the list's categories
+    const list = await List.findById(expense.listId._id).populate('categories');
+    const categoryObj = list.categories.find(cat => cat.name === category.name);
+    if (!categoryObj) {
+      return res.status(400).send({ message: 'Category not found in the list' });
+    }
+
+    // Update the expense
+    const updatedExpense = await Expense.findByIdAndUpdate(
+      expenseId,
+      {
+        description: description.trim(),
+        amount: parseFloat(amount),
+        category: categoryObj._id,
+        date: new Date(date + 'T12:00:00.000Z')
+      },
+      { new: true }
+    ).populate('category').populate('createdBy');
+
+    res.status(200).send(updatedExpense);
+  } catch (error) {
+    console.error('Error updating expense:', error);
     res.status(500).send({ message: 'Internal server error' });
   }
 });
